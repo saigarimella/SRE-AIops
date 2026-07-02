@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StreamFlix</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0e17;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;min-height:100vh}
+.header{display:flex;align-items:center;justify-content:space-between;padding:16px 40px;background:linear-gradient(180deg,rgba(10,14,23,.95),transparent);position:fixed;top:0;left:0;right:0;z-index:10}
+.logo{font-size:26px;font-weight:700;letter-spacing:-0.5px}
+.logo span{color:#E6522C}
+.nav{display:flex;gap:28px;font-size:14px;color:rgba(255,255,255,.7)}
+.nav a{color:inherit;text-decoration:none;cursor:pointer}
+.nav a.active{color:#fff;font-weight:600}
+.status-badge{display:flex;align-items:center;gap:8px;font-size:13px}
+.status-dot{width:10px;height:10px;border-radius:50%;transition:background .3s}
+.hero{position:relative;width:100%;background:#000}
+.hero video{width:100%;display:block;max-height:60vh;object-fit:contain;background:#000;transition:opacity .5s}
+.hero video.dimmed{opacity:0.15}
+.hero-overlay{position:absolute;bottom:0;left:0;right:0;padding:30px 40px;background:linear-gradient(transparent,rgba(0,0,0,.9));pointer-events:none}
+.hero-title{font-size:28px;font-weight:700;margin-bottom:4px}
+.hero-meta{font-size:13px;color:rgba(255,255,255,.6);margin-bottom:10px}
+.hero-buttons{display:flex;gap:12px;pointer-events:auto}
+.btn{padding:8px 20px;border-radius:6px;border:none;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px}
+.btn-play{background:#E6522C;color:#fff}
+.btn-info{background:rgba(255,255,255,.15);color:#fff}
+.failure-overlay{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:5;transition:opacity .5s;pointer-events:none}
+.failure-overlay.hidden{opacity:0}
+.failure-overlay.visible{opacity:1}
+.buffering-overlay{background:rgba(0,0,0,.75)}
+.spinner{width:56px;height:56px;border:4px solid rgba(255,255,255,.15);border-top-color:#E6522C;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.buffering-text{font-size:16px;color:rgba(255,255,255,.8);margin-bottom:6px}
+.buffering-sub{font-size:13px;color:rgba(255,255,255,.4)}
+.dead-overlay{background:rgba(0,0,0,.85)}
+.dead-icon{font-size:52px;margin-bottom:14px}
+.dead-text{font-size:20px;font-weight:600;margin-bottom:6px}
+.dead-sub{font-size:14px;color:rgba(255,255,255,.5);text-align:center;max-width:400px;line-height:1.5}
+
+/* Microservices status bar */
+.svc-bar{display:flex;justify-content:center;gap:0;border-bottom:1px solid rgba(255,255,255,.06)}
+.svc-card{flex:1;padding:14px 20px;text-align:center;border-right:1px solid rgba(255,255,255,.06);transition:background .3s}
+.svc-card:last-child{border-right:none}
+.svc-card.healthy{background:rgba(34,197,94,.05)}
+.svc-card.down{background:rgba(239,68,68,.1)}
+.svc-name{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.4);margin-bottom:6px;font-weight:600}
+.svc-status{display:flex;align-items:center;justify-content:center;gap:6px;font-size:14px;font-weight:600}
+.svc-dot{width:8px;height:8px;border-radius:50%;transition:background .3s}
+.svc-latency{font-size:11px;color:rgba(255,255,255,.3);margin-top:4px}
+
+/* Metrics bar */
+.stats-bar{display:flex;justify-content:center;gap:40px;padding:14px 40px;background:rgba(255,255,255,.02);border-bottom:1px solid rgba(255,255,255,.06);transition:background .3s}
+.stats-bar.alert{background:rgba(220,38,38,.08)}
+.stat{text-align:center}
+.stat-value{font-size:18px;font-weight:600;transition:color .3s}
+.stat-label{font-size:10px;color:rgba(255,255,255,.35);margin-top:2px;text-transform:uppercase;letter-spacing:1px}
+
+/* Content rows */
+.section{padding:24px 40px 10px}
+.section-title{font-size:16px;font-weight:600;margin-bottom:12px}
+.row{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px}
+.card{min-width:170px;flex-shrink:0;cursor:pointer;transition:transform .2s}
+.card:hover{transform:scale(1.05)}
+.card-thumb{width:170px;height:96px;border-radius:8px;display:flex;align-items:flex-end;padding:8px;font-size:11px;font-weight:600;position:relative;overflow:hidden}
+.card-thumb::after{content:'';position:absolute;bottom:0;left:0;right:0;height:50%;background:linear-gradient(transparent,rgba(0,0,0,.7))}
+.card-thumb span{position:relative;z-index:1}
+.card-title{font-size:11px;color:rgba(255,255,255,.5);margin-top:6px}
+.tag{position:absolute;top:6px;left:6px;background:#E6522C;color:#fff;font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;z-index:1}
+
+.log-section{padding:16px 40px}
+.log-title{font-size:13px;font-weight:600;margin-bottom:8px;color:rgba(255,255,255,.4)}
+.log{background:rgba(255,255,255,.03);border-radius:8px;padding:10px 14px;max-height:100px;overflow-y:auto;font-family:"SF Mono",Monaco,Consolas,monospace;font-size:11px;line-height:1.8;color:rgba(255,255,255,.5)}
+.log .ok{color:#22C55E}.log .err{color:#EF4444}.log .warn{color:#F59E0B}.log .info{color:#3B82F6}
+.footer{text-align:center;padding:20px;color:rgba(255,255,255,.15);font-size:11px}
+</style>
+</head>
+<body>
+<header class="header">
+  <div class="logo"><span>Stream</span>Flix</div>
+  <nav class="nav"><a class="active">Home</a><a>TV Shows</a><a>Movies</a><a>New & Popular</a></nav>
+  <div class="status-badge" id="statusBadge"><span class="status-dot" id="statusDot"></span><span id="statusText">Connecting...</span></div>
+</header>
+<div class="hero">
+  <video id="mainVideo" autoplay loop muted playsinline poster="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Big_buck_bunny_poster_big.jpg/1280px-Big_buck_bunny_poster_big.jpg">
+    <source src="/video/BigBuckBunny.mp4" type="video/mp4">
+  </video>
+  <div class="failure-overlay buffering-overlay hidden" id="bufferingOverlay"><div class="spinner"></div><div class="buffering-text">Buffering...</div><div class="buffering-sub">StreamFlix is experiencing issues</div></div>
+  <div class="failure-overlay dead-overlay hidden" id="deadOverlay"><div class="dead-icon">&#9888;</div><div class="dead-text">Stream unavailable</div><div class="dead-sub">We're having trouble connecting to StreamFlix.<br>Our team has been notified. Retrying automatically...</div></div>
+  <div class="hero-overlay">
+    <div class="hero-title">Big Buck Bunny</div>
+    <div class="hero-meta">2008 &middot; Animation &middot; 10 min &middot; Open Source</div>
+    <div class="hero-buttons"><button class="btn btn-play" onclick="togglePlay()">&#9654; Play</button><button class="btn btn-info">&#9432; More Info</button></div>
+  </div>
+</div>
+
+<!-- Microservices status -->
+<div class="svc-bar" id="svcBar">
+  <div class="svc-card" id="svc-api"><div class="svc-name">API Gateway</div><div class="svc-status"><span class="svc-dot" id="dot-api"></span><span id="txt-api">--</span></div><div class="svc-latency" id="lat-api">--</div></div>
+  <div class="svc-card" id="svc-catalog"><div class="svc-name">Catalog</div><div class="svc-status"><span class="svc-dot" id="dot-catalog"></span><span id="txt-catalog">--</span></div><div class="svc-latency" id="lat-catalog">--</div></div>
+  <div class="svc-card" id="svc-streaming"><div class="svc-name">Streaming</div><div class="svc-status"><span class="svc-dot" id="dot-streaming"></span><span id="txt-streaming">--</span></div><div class="svc-latency" id="lat-streaming">--</div></div>
+  <div class="svc-card" id="svc-payments"><div class="svc-name">Payments</div><div class="svc-status"><span class="svc-dot" id="dot-payments"></span><span id="txt-payments">--</span></div><div class="svc-latency" id="lat-payments">--</div></div>
+</div>
+
+<!-- Overall metrics -->
+<div class="stats-bar" id="statsBar">
+  <div class="stat"><div class="stat-value" id="sTraffic" style="color:#3B82F6">--</div><div class="stat-label">total streams/sec</div></div>
+  <div class="stat"><div class="stat-value" id="sErrors" style="color:#22C55E">--</div><div class="stat-label">error rate</div></div>
+  <div class="stat"><div class="stat-value" id="sLatency" style="color:#8B5CF6">--</div><div class="stat-label">p95 latency</div></div>
+  <div class="stat"><div class="stat-value" id="sBudget" style="color:#22C55E">--</div><div class="stat-label">error budget</div></div>
+</div>
+
+<section class="section">
+  <div class="section-title">Trending in SRE</div>
+  <div class="row">
+    <div class="card"><div class="card-thumb" style="background:linear-gradient(135deg,#1a1040,#3d1a6e)"><span class="tag">NEW</span><span>Incident Command</span></div><div class="card-title">When the pager goes off at 3 AM</div></div>
+    <div class="card"><div class="card-thumb" style="background:linear-gradient(135deg,#0a2a1a,#1a5c3a)"><span>Zero Downtime</span></div><div class="card-title">The myth, the legend</div></div>
+    <div class="card"><div class="card-thumb" style="background:linear-gradient(135deg,#3a0a0a,#8a1a1a)"><span class="tag">TOP 10</span><span>Chaos Monkey</span></div><div class="card-title">Breaking things on purpose</div></div>
+    <div class="card"><div class="card-thumb" style="background:linear-gradient(135deg,#0a1a3a,#1a3a6e)"><span>Rise of the AIOps</span></div><div class="card-title">Machines fixing machines</div></div>
+    <div class="card"><div class="card-thumb" style="background:linear-gradient(135deg,#2a1a0a,#6e3a1a)"><span>The Error Budget</span></div><div class="card-title">How much failure can you afford?</div></div>
+  </div>
+</section>
+
+<div class="log-section">
+  <div class="log-title">&#9656; Live health log</div>
+  <div class="log" id="log"></div>
+</div>
+<div class="footer">StreamFlix &middot; SRE + AIOps Lab &middot; 4 microservices on streamflix-net</div>
+
+<script>
+var BACKEND = '/backend';
+var PROM = '/prom';
+var SERVICES = {
+  api:       { path: '/svc/api/',       name: 'API Gateway' },
+  catalog:   { path: '/svc/catalog/',   name: 'Catalog' },
+  streaming: { path: '/svc/streaming/', name: 'Streaming' },
+  payments:  { path: '/svc/payments/',  name: 'Payments' }
+};
+var video = document.getElementById('mainVideo');
+var log = document.getElementById('log');
+var state = 'unknown';
+var svcStates = {};
+
+function togglePlay() {
+  if (video.paused) { video.play(); video.muted = false; }
+  else { video.pause(); }
+}
+function logMsg(cls, msg) {
+  var ts = new Date().toLocaleTimeString();
+  var div = document.createElement('div');
+  div.className = cls;
+  div.textContent = '[' + ts + '] ' + msg;
+  log.prepend(div);
+  while (log.children.length > 50) log.removeChild(log.lastChild);
+}
+function setStatus(color, text) {
+  document.getElementById('statusDot').style.background = color;
+  document.getElementById('statusBadge').style.color = color;
+  document.getElementById('statusText').textContent = text;
+}
+function showOverlay(id) {
+  ['bufferingOverlay','deadOverlay'].forEach(function(o) {
+    document.getElementById(o).className = document.getElementById(o).className.replace('visible','hidden');
+  });
+  if (id) {
+    var el = document.getElementById(id);
+    el.className = el.className.replace('hidden','visible');
+  }
+}
+
+// Check each microservice individually
+async function checkServices() {
+  var allUp = 0;
+  var anyDown = false;
+
+  for (var key in SERVICES) {
+    var svc = SERVICES[key];
+    var dotEl = document.getElementById('dot-' + key);
+    var txtEl = document.getElementById('txt-' + key);
+    var latEl = document.getElementById('lat-' + key);
+    var cardEl = document.getElementById('svc-' + key);
+
+    try {
+      var start = performance.now();
+      var resp = await fetch(svc.path, { signal: AbortSignal.timeout(3000) });
+      var elapsed = Math.round(performance.now() - start);
+
+      if (resp.ok) {
+        dotEl.style.background = '#22C55E';
+        txtEl.textContent = 'Healthy';
+        txtEl.style.color = '#22C55E';
+        latEl.textContent = elapsed + 'ms';
+        cardEl.className = 'svc-card healthy';
+        svcStates[key] = 'up';
+        allUp++;
+      } else {
+        dotEl.style.background = '#EF4444';
+        txtEl.textContent = 'Error ' + resp.status;
+        txtEl.style.color = '#EF4444';
+        latEl.textContent = '--';
+        cardEl.className = 'svc-card down';
+        svcStates[key] = 'down';
+        anyDown = true;
+        logMsg('err', svc.name + ' returned HTTP ' + resp.status);
+      }
+    } catch (e) {
+      dotEl.style.background = '#EF4444';
+      txtEl.textContent = 'DOWN';
+      txtEl.style.color = '#EF4444';
+      latEl.textContent = '--';
+      cardEl.className = 'svc-card down';
+      svcStates[key] = 'down';
+      anyDown = true;
+      logMsg('err', svc.name + ' is unreachable');
+    }
+  }
+
+  // Update overall status based on services
+  if (allUp === 4) {
+    if (state !== 'healthy') {
+      state = 'healthy';
+      showOverlay(null);
+      video.classList.remove('dimmed');
+      video.play();
+      setStatus('#22C55E', 'All services healthy \u2014 ' + allUp + '/4 up');
+      logMsg('ok', 'All services recovered');
+    }
+  } else if (svcStates.api === 'down' || svcStates.streaming === 'down') {
+    // Critical services down — video stops
+    if (state !== 'down') {
+      state = 'down';
+      video.pause();
+      video.classList.add('dimmed');
+      showOverlay('deadOverlay');
+      var downList = [];
+      for (var k in svcStates) { if (svcStates[k] === 'down') downList.push(SERVICES[k].name); }
+      setStatus('#EF4444', downList.join(', ') + ' DOWN');
+      logMsg('err', 'Critical service down: ' + downList.join(', '));
+    }
+  } else if (anyDown) {
+    // Non-critical service down — show warning but keep playing
+    if (state !== 'degraded') {
+      state = 'degraded';
+      var downList2 = [];
+      for (var k2 in svcStates) { if (svcStates[k2] === 'down') downList2.push(SERVICES[k2].name); }
+      setStatus('#F59E0B', 'Degraded \u2014 ' + downList2.join(', ') + ' down');
+      logMsg('warn', 'Non-critical service down: ' + downList2.join(', ') + ' \u2014 video continues');
+    }
+  }
+}
+
+// Fetch Prometheus metrics
+async function fetchMetrics() {
+  try {
+    var q = async function(expr) {
+      var r = await fetch(PROM + '/api/v1/query?query=' + encodeURIComponent(expr), { signal: AbortSignal.timeout(3000) });
+      var d = await r.json();
+      if (d.status === 'success' && d.data.result.length > 0) return parseFloat(d.data.result[0].value[1]);
+      return null;
+    };
+    var total = await q('sum(rate(http_requests_total[1m]))');
+    if (total !== null) document.getElementById('sTraffic').textContent = Math.round(total);
+    var errs = await q('sum(rate(http_requests_total{status=~"5.."}[1m]))');
+    if (total && total > 0) {
+      var errPct = errs ? ((errs / total) * 100) : 0;
+      document.getElementById('sErrors').textContent = errPct.toFixed(1) + '%';
+      document.getElementById('sErrors').style.color = errPct > 5 ? '#EF4444' : errPct > 1 ? '#F59E0B' : '#22C55E';
+    }
+    var lat = await q('1000 * histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[1m])))');
+    if (lat !== null) {
+      document.getElementById('sLatency').textContent = Math.round(lat) + 'ms';
+      document.getElementById('sLatency').style.color = lat > 1000 ? '#EF4444' : lat > 100 ? '#F59E0B' : '#8B5CF6';
+    }
+    var budget = await q('100 * (1 - ((1 - sum(rate(http_requests_total{status!~"5.."}[30m])) / sum(rate(http_requests_total[30m]))) / (1 - 0.99)))');
+    if (budget !== null) {
+      document.getElementById('sBudget').textContent = Math.round(Math.max(budget, -999)) + '%';
+      document.getElementById('sBudget').style.color = budget > 60 ? '#22C55E' : budget > 25 ? '#F59E0B' : '#EF4444';
+    }
+    document.getElementById('statsBar').className = (state === 'down') ? 'stats-bar alert' : 'stats-bar';
+  } catch (e) {}
+}
+
+logMsg('info', 'StreamFlix UI started \u2014 monitoring 4 microservices');
+checkServices();
+fetchMetrics();
+setInterval(checkServices, 2000);
+setInterval(fetchMetrics, 5000);
+</script>
+</body>
+</html>
